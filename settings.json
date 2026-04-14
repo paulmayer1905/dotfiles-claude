@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(nest new:*)",
+      "Bash(nest --version)",
+      "Bash(npm create:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npm run:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(curl -s -X POST http://localhost:3000/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"vincent@jamrock-paris.com\",\"password\":\"admin123\"}')",
+      "Bash(echo \"Backend lancé en arrière-plan \\(PID: $!\\)\")",
+      "Bash(echo \"Frontend lancé en arrière-plan \\(PID: $!\\)\")",
+      "Bash(curl -s http://localhost:3000/api/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"vincent@jamrock-paris.com\",\"password\":\"admin123\"}')",
+      "Bash(curl -s http://localhost:5173)",
+      "Read(//tmp/**)",
+      "Bash(netstat -ano)",
+      "Read(//c/travail/Skello/**)",
+      "Bash(xargs -I{} taskkill /PID {} /F)",
+      "Bash(curl -s -X POST http://localhost:5173/api/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"vincent@jamrock-paris.com\",\"password\":\"admin123\"}')"
+    ]
+  },
+  "effortLevel": "max",
+  "model": "opus"
+}
