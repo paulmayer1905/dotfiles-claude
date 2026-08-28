@@ -84,6 +84,8 @@ Quand l'US sert à **obtenir une décision** et non à spécifier un comportemen
 - **Libellés de boutons** : forme courte (« Créer une fiche »), l'intitulé complet allant dans le titre du bloc — guidelines UX France Travail.
 - **Statuts** : les libellés affichés dans le panneau d'aide font foi — Validation de création en attente, Création refusée, Attribution en attente, En édition, Arbitrage en attente, En renvoi (n/3), Validée, Rejetée, Attribution refusée.
 - Citer les libellés d'interface entre guillemets français « … ».
+- **Apostrophe** : la prose des US emploie l'apostrophe **droite** (`'`), conformément au backlog. L'apostrophe typographique (`’`) n'apparaît que **dans les libellés d'interface cités**, lorsqu'elle fait partie du texte à livrer.
+- Quand un libellé cité porte déjà sa ponctuation finale, ne pas ajouter de point après le guillemet fermant : *« … les offres. »* et non *« … les offres. ».*
 
 ## CONTRÔLE AVANT LIVRAISON
 
