@@ -71,6 +71,7 @@
       "Write(//c/travail/**)"
     ]
   },
+  "remoteControlAtStartup": true,
   "model": "opus[1m]",
   "effortLevel": "max",
   "cleanupPeriodDays": 365
