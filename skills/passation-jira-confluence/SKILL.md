@@ -41,19 +41,25 @@ Pour Confluence, ajouter :
 Lancer `scripts/controle_passation.py` (voir ce dossier) :
 
 ```bash
-python scripts/controle_passation.py <chemin.json> <chemin.md> [autre.md …]
+python scripts/controle_passation.py <chemin.json> <chemin.md> [autre.md …]        --historique <dossier des lots antérieurs>
 ```
 
-Il vérifie automatiquement :
-- **cohérence `.json` ↔ `.md`** : chaque `with`, `find`, `description`, `Description`, `Summary` et chaque entrée de `notes` / `objectifs` / `elementsAction` du JSON figure dans le `.md` ;
-- **piège des valeurs citées** : un texte ajouté contient-il une ancienne valeur visée par un remplacement global ?
-- **numérotation** : les identifiants ajoutés sont-ils contigus ?
-- **présence du bloc Précautions** et de la consigne de dry-run.
+**Toujours passer `--historique`** : c'est ce qui permet les contrôles 5 et 6, les plus utiles.
 
-Puis, **à la main** — le script ne peut pas les voir :
+| # | Contrôle | Ce qu'il détecte |
+|---|---|---|
+| 1 | Cohérence `.json` ↔ `.md` | un `with` / `find` / `description` / `Summary` présent dans le JSON mais absent du `.md` |
+| 2 | Piège des valeurs citées | un texte ajouté qui cite une ancienne valeur qu'un remplacement global inverserait |
+| 3 | Numérotation | trous ou collisions dans les identifiants ajoutés |
+| 4 | Précautions | absence du bloc « Précautions » ou de la consigne de dry-run |
+| 5 | Sections périmées | un point listé « en attente / à valider » alors que le lot le tranche |
+| 6 | Cohérence inter-lots | un libellé fixé par un lot antérieur **déjà appliqué**, remplacé de fait par le lot courant sans opération de retrait |
 
-- **Sections rédactionnelles** : relire « points validés », « points en attente », contexte. Elles deviennent périmées à chaque décision et ne dérivent pas du JSON.
-- **Cohérence entre lots** : si une décision annule une décision **déjà appliquée**, prévoir une opération de retrait (`deleteLine`, `removeRule`) — la retirer du nouveau lot ne suffit pas. Vérifier aussi si un lot préparé mais non appliqué devient caduc : le déplacer dans `Caduc/` avec une note.
+Le contrôle 6 tient compte des `globalOperations` : un remplacement global couvre l'ancien texte partout, il ne déclenche donc pas d'alerte.
+
+Reste **à la main**, le script ne pouvant pas les juger :
+- la **pertinence** des textes rédigés (le contrôle 5 signale les suspects, pas les formulations inexactes) ;
+- le **caractère caduc d'un lot entier** : si une décision rend inutile un lot préparé mais non appliqué, le déplacer dans `Caduc/` avec une note expliquant pourquoi.
 
 ## PIÈGES CONNUS
 
