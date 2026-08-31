@@ -4,6 +4,9 @@
 Usage :
     python controle_passation.py <operations.json> <delta.md> [autre.md ...]
                                  [--historique <dossier_des_lots_anterieurs>]
+                                 [--backlog <backlog_consolide.md>]
+                                 [--cr <fichier_ou_dossier_de_CR>]
+                                 [--lisezmoi <LISEZMOI - Index des passations.md>]
 
 Contrôles :
   1. cohérence .json -> .md (tout texte porteur de sens du JSON figure dans le MD)
@@ -12,6 +15,9 @@ Contrôles :
   4. présence du bloc « Précautions » et de la consigne de dry-run
   5. sections rédactionnelles périmées (un point listé « en attente » est traité par le lot)
   6. cohérence inter-lots (une décision antérieure appliquée est-elle contredite sans retrait ?)
+  7. couverture : un objet d'interface nommé dans une décision est-il sujet d'une US ?
+     (--backlog) Détecte l'objet cité de partout mais spécifié nulle part.
+  8. points « à valider » des CR non suivis (--cr + --lisezmoi)
 
 Sortie : rapport lisible + code retour 1 si au moins un point est à corriger.
 """
@@ -22,6 +28,26 @@ CLES_LISTE = ('notes', 'objectifs', 'elementsAction')
 OPS_RETRAIT = ('deleteLine', 'removeRule', 'removeSection', 'replaceText', 'setRuleDescription')
 VIDES = {'les', 'des', 'une', 'aux', 'sur', 'pour', 'dans', 'que', 'qui', 'est', 'sont',
          'doit', 'application', 'veux', 'lorsque', 'avec', 'par', 'plus', 'tout', 'toutes'}
+
+# Objets d'interface : un lot qui les nomme doit pouvoir les rattacher a une US.
+OBJETS = ('panneau', 'encart', 'ecran', 'bouton', 'onglet', 'page', 'tableau de bord',
+          'rubrique', 'sous-rubrique', 'champ', 'colonne', 'popin', 'pop-up',
+          'boite de dialogue', 'bandeau', 'menu', 'formulaire', 'notification')
+RE_OBJET = re.compile(
+    r'\b(' + '|'.join(o.replace(' ', r'\s+').replace('-', r'[- ]') for o in OBJETS) +
+    r')\b[^«"\n]{0,30}(?:«\s*([^»\n]{3,60}?)\s*»|"([^"\n]{3,60}?)")', re.I)
+
+# Un objet que le lot RETIRE n'a pas besoin d'une US : on ne le signale pas.
+RE_NEGATION = re.compile(
+    r"(ne doit pas|ne doivent pas|ne soit pas|ne sont pas|n'affiche pas|sans |pas de |"
+    r"retrait|retir[ée]|supprim[ée]|abandonn[ée]|ne propose pas|n'en comporte)", re.I)
+
+# Marqueurs d'un point laisse en suspens dans un compte-rendu.
+RE_SUSPENS = re.compile(
+    r"([^.;|\n]{10,220}?(?:[àa]\s+valider|[àa]\s+confirmer|[àa]\s+trancher|"
+    r"[àa]\s+arbitrer|[àa]\s+pr[ée]ciser|[àa]\s+d[ée]finir|"
+    r"en\s+attente\s+de\s+r[ée]ponse|reste\s+[àa]\s+d[ée]finir|"
+    r"question\s+ouverte)[^.;|\n]{0,140})", re.I)
 
 
 def norm(s: str) -> str:
@@ -76,13 +102,57 @@ def cibles_du_lot(data):
     return res
 
 
+def objets_nommes(textes):
+    """[(type, nom)] — objets d'interface nommes dans les textes du lot."""
+    vus, out = set(), []
+    for t in textes:
+        for m in RE_OBJET.finditer(unicodedata.normalize('NFKC', t)):
+            typ = re.sub(r'\s+', ' ', m.group(1)).lower()
+            nom = (m.group(2) or m.group(3) or '').strip()
+            if len(nom) < 4 or norm(nom) in vus:
+                continue
+            # contexte immediat : un objet que le lot retire ne demande pas d'US.
+            # La negation peut preceder l'objet (« ne doit pas proposer de bouton X »)
+            # comme le suivre (« le bouton X soit supprime »).
+            contexte = t[max(0, m.start() - 90):m.end() + 70]
+            if RE_NEGATION.search(norm(contexte)):
+                vus.add(norm(nom))
+                continue
+            vus.add(norm(nom))
+            out.append((typ, nom))
+    return out
+
+
+def titres_backlog(chemin):
+    """[(cle, titre)] — les US du backlog, reperees par leur ligne de titre."""
+    if not chemin or not os.path.exists(chemin):
+        return None
+    brut = open(chemin, encoding='utf-8').read()
+    res = []
+    for l in brut.split('\n'):
+        m = re.match(r'^#{2,4}\s+((?:TE_OPUR-)?\d*)\s*[—-]?\s*(.+?)\s*$', l)
+        if m and m.group(2) and not l.startswith('#####'):
+            res.append((m.group(1) or '?', m.group(2)))
+    return res, brut
+
+
 def main():
     args = [a for a in sys.argv[1:]]
     hist_dir = None
-    if '--historique' in args:
-        i = args.index('--historique')
-        hist_dir = args[i + 1] if i + 1 < len(args) else None
-        del args[i:i + 2]
+    backlog = cr_path = lisezmoi = None
+    for drapeau in ('--historique', '--backlog', '--cr', '--lisezmoi'):
+        if drapeau in args:
+            i = args.index(drapeau)
+            val = args[i + 1] if i + 1 < len(args) else None
+            del args[i:i + 2]
+            if drapeau == '--historique':
+                hist_dir = val
+            elif drapeau == '--backlog':
+                backlog = val
+            elif drapeau == '--cr':
+                cr_path = val
+            else:
+                lisezmoi = val
     if len(args) < 2:
         print(__doc__)
         return 2
@@ -212,12 +282,106 @@ def main():
             print("aucune contradiction non traitée détectée")
         pb += alertes
 
+
+    # ---- 7. couverture : objet nomme partout, specifie nulle part
+    print("\n[7] Couverture des objets d'interface nommés :", end=" ")
+    if not backlog:
+        print("non contrôlée (passer --backlog <backlog consolidé.md>)")
+    else:
+        bl = titres_backlog(backlog)
+        if bl is None:
+            print(f"backlog introuvable ({backlog})")
+        else:
+            titres, brut_bl = bl
+            # les US creees par le lot lui-meme comptent comme couverture
+            for c in data.get('creations', []):
+                s = c.get('fields', {}).get('Summary') or c.get('summary') or ''
+                if s:
+                    titres.append(('(ce lot)', s))
+            corpus = norm(brut_bl)
+            textes_lot = [v for _, v in frags_src] if 'frags_src' in dir() else []
+            if not textes_lot:
+                tmp = []
+                collecte(data, tmp)
+                textes_lot = [v for _, v in tmp]
+            alertes7 = 0
+            for typ, nom in objets_nommes(textes_lot):
+                mn = mots(nom)
+                if len(mn) < 1:
+                    continue
+                sujet = any(len(mn & mots(t)) >= min(2, len(mn)) for _, t in titres)
+                if sujet:
+                    continue
+                cites = corpus.count(norm(nom))
+                if cites > 0:
+                    alertes7 += 1
+                    print()
+                    print(f"      ! {typ} « {nom} »")
+                    print(f"        cité {cites} fois dans le backlog, sujet d'aucune US")
+                    print(f"        -> soit créer l'US qui le spécifie, soit rattacher explicitement")
+                    print(f"           la décision à une US existante")
+            if alertes7 == 0:
+                print("tout objet nommé est rattaché à une US")
+            pb += alertes7
+
+    # ---- 8. points « à valider » des CR non suivis
+    print("[8] Points « à valider » des comptes-rendus :", end=" ")
+    if not (cr_path and lisezmoi):
+        print("non contrôlés (passer --cr <CR> et --lisezmoi <index>)")
+    elif not os.path.exists(cr_path) or not os.path.exists(lisezmoi):
+        print("chemin introuvable")
+    else:
+        fichiers = ([cr_path] if os.path.isfile(cr_path)
+                    else glob.glob(os.path.join(cr_path, '**', '*.md'), recursive=True))
+        suivi = norm(open(lisezmoi, encoding='utf-8').read())
+        points, vus8 = [], set()
+        for f in fichiers:
+            try:
+                brut8 = open(f, encoding='utf-8').read()
+                contenu = norm(brut8.replace('<br>', '\n').replace('<BR>', '\n'))
+            except Exception:
+                continue
+            for ligne in contenu.split('\n'):
+              for m in RE_SUSPENS.finditer(ligne):
+                p = re.sub(r'\s+', ' ', m.group(1)).strip(' -|*')
+                if len(p) > 12 and p not in vus8:
+                    vus8.add(p)
+                    points.append((os.path.basename(f), p))
+        non_suivis = []
+        for f, p in points:
+            mp = mots(p)
+            if len(mp) < 3:
+                continue
+            # le point est-il repris dans l'index (points ouverts / etat) ?
+            couvert = False
+            for phrase in suivi.split('\n'):
+                if len(mots(phrase) & mp) >= max(3, len(mp) // 3):
+                    couvert = True
+                    break
+            if not couvert:
+                non_suivis.append((f, p))
+        if not points:
+            print("aucun point en suspens détecté dans les CR")
+        elif not non_suivis:
+            print(f"{len(points)} point(s) détecté(s), tous repris dans l'index")
+        else:
+            print(f"{len(points)} détecté(s), {len(non_suivis)} NON repris dans l'index")
+            for f, p in non_suivis[:12]:
+                print(f"      ! {p[:150]}")
+                print(f"        ({f})")
+            if len(non_suivis) > 12:
+                print(f"      … et {len(non_suivis) - 12} autre(s)")
+            print("      -> ajouter ces points aux « Points ouverts » du LISEZMOI,")
+            print("         ou les clore explicitement.")
+            pb += len(non_suivis)
+
     print("\n" + "=" * 64)
     print("RÉSULTAT : lot conforme, prêt à être livré." if pb == 0
           else f"RÉSULTAT : {pb} point(s) à corriger avant livraison.")
-    if not hist_dir:
-        print("Astuce : ajouter --historique <dossier des lots> pour contrôler aussi")
-        print("les contradictions avec les décisions déjà appliquées.")
+    manquants = [d for d, v in (('--historique', hist_dir), ('--backlog', backlog),
+                                ('--cr', cr_path), ('--lisezmoi', lisezmoi)) if not v]
+    if manquants:
+        print("Astuce : contrôles non exécutés faute d'argument -> " + ", ".join(manquants))
     return 1 if pb else 0
 
 

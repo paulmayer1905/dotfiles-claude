@@ -41,21 +41,29 @@ Pour Confluence, ajouter :
 Lancer `scripts/controle_passation.py` (voir ce dossier) :
 
 ```bash
-python scripts/controle_passation.py <chemin.json> <chemin.md> [autre.md …]        --historique <dossier des lots antérieurs>
+python scripts/controle_passation.py <chemin.json> <chemin.md> [autre.md …] \
+    --historique <dossier des lots antérieurs> \
+    --backlog    <backlog consolidé.md> \
+    --cr         <dossier des comptes-rendus> \
+    --lisezmoi   <LISEZMOI - Index des passations.md>
 ```
 
-**Toujours passer `--historique`** : c'est ce qui permet les contrôles 5 et 6, les plus utiles.
+**Passer les quatre options.** Chacune débloque un contrôle qui ne peut pas s'exécuter sans elle, et ce sont les plus utiles : le script le rappelle en fin de rapport pour toute option manquante.
 
-| # | Contrôle | Ce qu'il détecte |
-|---|---|---|
-| 1 | Cohérence `.json` ↔ `.md` | un `with` / `find` / `description` / `Summary` présent dans le JSON mais absent du `.md` |
-| 2 | Piège des valeurs citées | un texte ajouté qui cite une ancienne valeur qu'un remplacement global inverserait |
-| 3 | Numérotation | trous ou collisions dans les identifiants ajoutés |
-| 4 | Précautions | absence du bloc « Précautions » ou de la consigne de dry-run |
-| 5 | Sections périmées | un point listé « en attente / à valider » alors que le lot le tranche |
-| 6 | Cohérence inter-lots | un libellé fixé par un lot antérieur **déjà appliqué**, remplacé de fait par le lot courant sans opération de retrait |
+| # | Contrôle | Ce qu'il détecte | Option |
+|---|---|---|---|
+| 1 | Cohérence `.json` ↔ `.md` | un `with` / `find` / `description` / `Summary` présent dans le JSON mais absent du `.md` | — |
+| 2 | Piège des valeurs citées | un texte ajouté qui cite une ancienne valeur qu'un remplacement global inverserait | — |
+| 3 | Numérotation | trous ou collisions dans les identifiants ajoutés | — |
+| 4 | Précautions | absence du bloc « Précautions » ou de la consigne de dry-run | — |
+| 5 | Sections périmées | un point listé « en attente / à valider » alors que le lot le tranche | — |
+| 6 | Cohérence inter-lots | un libellé fixé par un lot antérieur **déjà appliqué**, remplacé de fait par le lot courant sans opération de retrait | `--historique` |
+| 7 | **Couverture** | un objet d'interface **nommé dans une décision mais sujet d'aucune US** — cité de partout, spécifié nulle part | `--backlog` |
+| 8 | **Points en suspens** | une mention « à valider / à confirmer / à arbitrer » d'un CR qui ne figure pas dans les points ouverts de l'index | `--cr` + `--lisezmoi` |
 
 Le contrôle 6 tient compte des `globalOperations` : un remplacement global couvre l'ancien texte partout, il ne déclenche donc pas d'alerte.
+
+Le contrôle 7 ignore les objets que le lot **retire** (« ne doit pas proposer de bouton « X » », « le bouton « X » soit supprimé ») : un objet supprimé n'a pas besoin d'US. Il compte comme couverture les US **créées par le lot lui-même**.
 
 Reste **à la main**, le script ne pouvant pas les juger :
 - la **pertinence** des textes rédigés (le contrôle 5 signale les suspects, pas les formulations inexactes) ;
@@ -71,6 +79,16 @@ Reste **à la main**, le script ne pouvant pas les juger :
 | Expression en minuscules confondue avec un libellé | remplacement sensible à la casse |
 | Trou ou collision dans la numérotation des règles | contrôle de contiguïté |
 | Champ inexistant dans le projet (`Epic Link`, `External component`) | faire résoudre par l'extension depuis un ticket existant, ou retirer le champ |
+| **Une décision porte sur un objet qui n'a pas d'US** — elle est rattachée au ticket le plus proche au lieu de faire lever « aucune US ne couvre ça » | contrôle 7 (`--backlog`) |
+| **Un point « à valider » d'un CR est transcrit fidèlement puis oublié** — il disparaît dans le compte-rendu sans devenir un point ouvert suivi | contrôle 8 (`--cr` + `--lisezmoi`) |
+
+### Le cas qui a motivé les contrôles 7 et 8
+
+Le panneau « Aide concernant le statut des demandes » a été cité douze fois dans les décisions — il **faisait autorité sur les libellés de statuts** — sans qu'aucune US ne le décrive. Il apparaissait dans le CR du 28/07 (« Proposition à valider : Aide statuts ; Panel ajouté à l'écran à valider »), dans le tableau de wording du même CR, et dans le support du point UX.
+
+Le mécanisme de l'oubli : **la propagation était un appariement, pas un contrôle de couverture.** Chaque décision était rattachée au ticket existant le plus proche ; celles qui portaient sur le panneau ont atterri sur l'US des statuts, faute de mieux. Une décision sans ticket d'accueil était absorbée par son voisin au lieu de déclencher une alerte.
+
+**Règle qui en découle : un objet d'interface qui sert de référence dans une décision doit lui-même être spécifié quelque part.** S'il ne l'est pas, créer l'US avant de propager la décision.
 
 ## FORMAT DU `.json`
 
