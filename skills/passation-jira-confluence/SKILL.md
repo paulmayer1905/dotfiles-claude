@@ -29,12 +29,33 @@ description: 'Rédige et contrôle un lot de passation (.md + .json) destiné à
 3. **Exceptions explicites** — tout texte citant volontairement une ancienne valeur porte `excludeFromGlobalOperations: true`.
 4. **`find` introuvable** — ne pas bloquer : signaler et poursuivre. Lister dans le lot les absences attendues et normales.
 5. **`find` multiple** — s'arrêter et demander confirmation avant d'écrire.
-6. **Dry-run obligatoire** — présenter le décompte par opération, attendre le feu vert, puis écrire.
+6. **Ticket gelé** — avant toute écriture, relever le statut du ticket. Un ticket **en cours de développement** n'est plus modifiable : voir la section « TICKET GELÉ » ci-dessous. Ne jamais modifier silencieusement un ticket dans cet état.
+7. **Dry-run obligatoire** — présenter le décompte par opération **et le statut de chaque ticket visé**, attendre le feu vert, puis écrire.
 
 Pour Confluence, ajouter :
 
-7. **Numérotation** — les `BR` sont indicatifs : relever le dernier réellement présent dans la section et poursuivre à partir de lui, en conservant l'ordre donné.
-8. **Résolution des pages** — une page sans `pageId` se résout par son titre, sous le `parentPageId` indiqué ; si elle est absente, s'arrêter et le signaler.
+8. **Numérotation** — les `BR` sont indicatifs : relever le dernier réellement présent dans la section et poursuivre à partir de lui, en conservant l'ordre donné.
+9. **Résolution des pages** — une page sans `pageId` se résout par son titre, sous le `parentPageId` indiqué ; si elle est absente, s'arrêter et le signaler.
+
+## TICKET GELÉ — un ticket en développement ne se modifie pas
+
+**Règle.** Un ticket entré en développement est figé : l'équipe travaille sur la description telle qu'elle était au moment de la prise en charge. La modifier après coup ferait diverger le développement en cours de sa spécification, sans que personne ne le voie.
+
+**Ce qu'il faut faire à la place.** Créer une **US de complément** :
+
+| | |
+|---|---|
+| **Titre** | celui du ticket d'origine, suivi de « — complément » |
+| **Lien** | rattachée au ticket d'origine (`relates to`) |
+| **Type, composant, épopée** | recopiés du ticket d'origine |
+| **Description** | uniquement les modifications qui auraient été apportées, avec un rappel de ce qu'elles remplacent ou complètent |
+| **Statut initial** | `New` |
+
+**Ce qui est attendu du document de passation.** Chaque opération visant un ticket doit prévoir les deux issues : la modification directe si le ticket est encore ouvert, la création d'un complément s'il est gelé. Le `.md` porte le texte de la description de complément, prêt à être repris tel quel — on ne demande pas à l'extension de le rédiger.
+
+**Ce qui est attendu de l'extension.** Relever le statut avant d'écrire, l'annoncer au dry-run, et basculer sur la création du complément sans demander d'arbitrage : la règle est posée ici.
+
+*Pourquoi cette règle : une modification appliquée à un ticket en cours de développement est invisible pour qui a déjà commencé à travailler dessus. Le complément, lui, apparaît comme un nouvel élément à traiter.*
 
 ## CONTRÔLES — à exécuter avant toute livraison
 
@@ -55,7 +76,7 @@ python scripts/controle_passation.py <chemin.json> <chemin.md> [autre.md …] \
 | 1 | Cohérence `.json` ↔ `.md` | un `with` / `find` / `description` / `Summary` présent dans le JSON mais absent du `.md` | — |
 | 2 | Piège des valeurs citées | un texte ajouté qui cite une ancienne valeur qu'un remplacement global inverserait | — |
 | 3 | Numérotation | trous ou collisions dans les identifiants ajoutés | — |
-| 4 | Précautions | absence du bloc « Précautions » ou de la consigne de dry-run | — |
+| 4 | Précautions | absence du bloc « Précautions », de la consigne de dry-run, ou — pour un lot qui modifie des tickets — de la règle du **ticket gelé** | — |
 | 5 | Sections périmées | un point listé « en attente / à valider » alors que le lot le tranche | — |
 | 6 | Cohérence inter-lots | un libellé fixé par un lot antérieur **déjà appliqué**, remplacé de fait par le lot courant sans opération de retrait | `--historique` |
 | 7 | **Couverture** | un objet d'interface **nommé dans une décision mais sujet d'aucune US** — cité de partout, spécifié nulle part | `--backlog` |
@@ -79,6 +100,7 @@ Reste **à la main**, le script ne pouvant pas les juger :
 | Expression en minuscules confondue avec un libellé | remplacement sensible à la casse |
 | Trou ou collision dans la numérotation des règles | contrôle de contiguïté |
 | Champ inexistant dans le projet (`Epic Link`, `External component`) | faire résoudre par l'extension depuis un ticket existant, ou retirer le champ |
+| **Un ticket pris en développement est modifié silencieusement** — le dev travaille sur une description qui a changé sous lui | contrôle 4 (mention du statut gelé) + US de complément |
 | **Une décision porte sur un objet qui n'a pas d'US** — elle est rattachée au ticket le plus proche au lieu de faire lever « aucune US ne couvre ça » | contrôle 7 (`--backlog`) |
 | **Un point « à valider » d'un CR est transcrit fidèlement puis oublié** — il disparaît dans le compte-rendu sans devenir un point ouvert suivi | contrôle 8 (`--cr` + `--lisezmoi`) |
 

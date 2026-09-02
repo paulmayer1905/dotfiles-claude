@@ -12,7 +12,8 @@ Contrôles :
   1. cohérence .json -> .md (tout texte porteur de sens du JSON figure dans le MD)
   2. piège des valeurs citées (un texte ajouté cite une valeur remplacée globalement)
   3. numérotation des identifiants ajoutés (contiguïté)
-  4. présence du bloc « Précautions » et de la consigne de dry-run
+  4. présence du bloc « Précautions », de la consigne de dry-run,
+     et — si le lot modifie des tickets — de la règle du ticket gelé
   5. sections rédactionnelles périmées (un point listé « en attente » est tranché par le lot ;
      les textes marqués [À VALIDER] ne comptent pas comme tranchés)
   6. cohérence inter-lots (une décision antérieure appliquée est-elle contredite sans retrait ?)
@@ -213,8 +214,20 @@ def main():
     # ---- 4. précautions / dry-run
     a_prec = 'précaution' in txt or 'precaution' in txt
     a_dry = 'dry-run' in txt or 'dry run' in txt
-    print(f"[4] Bloc « Précautions » : {'oui' if a_prec else 'NON'}   |   dry-run : {'oui' if a_dry else 'NON'}")
+    # un lot qui modifie des tickets doit prevoir le cas du ticket gele
+    modifie = bool(data.get('operations'))
+    a_gel = bool(re.search(
+        r"(ticket gel[ée]|tickets gel[ée]s|en cours de d[ée]veloppement|\bin dev\b"
+        r"|US de compl[ée]ment|story de compl[ée]ment|relever le statut|statut du ticket"
+        r"|statut de chaque ticket)", txt, re.I))
+    mention_gel = "sans objet (aucune modification de ticket)" if not modifie else ("oui" if a_gel else "NON")
+    print(f"[4] Bloc « Précautions » : {'oui' if a_prec else 'NON'}   |   dry-run : {'oui' if a_dry else 'NON'}"
+          f"   |   ticket gelé : {mention_gel}")
     pb += (0 if a_prec else 1) + (0 if a_dry else 1)
+    if modifie and not a_gel:
+        print("      ! le lot modifie des tickets sans prévoir le cas du ticket en cours de développement")
+        print("        -> ajouter la consigne : relever le statut, et créer une US de complément si le ticket est gelé")
+        pb += 1
 
     # ---- 5. sections rédactionnelles périmées
     # une puce listée sous un titre « en attente / à valider » ne doit pas être traitée par le lot
