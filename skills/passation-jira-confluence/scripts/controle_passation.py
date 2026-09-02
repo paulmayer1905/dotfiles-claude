@@ -13,7 +13,8 @@ Contrôles :
   2. piège des valeurs citées (un texte ajouté cite une valeur remplacée globalement)
   3. numérotation des identifiants ajoutés (contiguïté)
   4. présence du bloc « Précautions » et de la consigne de dry-run
-  5. sections rédactionnelles périmées (un point listé « en attente » est traité par le lot)
+  5. sections rédactionnelles périmées (un point listé « en attente » est tranché par le lot ;
+     les textes marqués [À VALIDER] ne comptent pas comme tranchés)
   6. cohérence inter-lots (une décision antérieure appliquée est-elle contredite sans retrait ?)
   7. couverture : un objet d'interface nommé dans une décision est-il sujet d'une US ?
      (--backlog) Détecte l'objet cité de partout mais spécifié nulle part.
@@ -217,7 +218,15 @@ def main():
 
     # ---- 5. sections rédactionnelles périmées
     # une puce listée sous un titre « en attente / à valider » ne doit pas être traitée par le lot
-    corpus_ops = norm(" ".join(t for c in cibles_du_lot(data).values() for t in c['textes']))
+    # Un point que le lot laisse explicitement ouvert ([À VALIDER]) n'est PAS tranché :
+    # on retire ces lignes du corpus, sinon le lot se signale lui-même comme périmé.
+    _textes = [t for c in cibles_du_lot(data).values() for t in c['textes']]
+    _tranche = []
+    for _t in _textes:
+        for _l in _t.split('\n'):
+            if not re.search(r"\[\s*(À|A)\s*VALIDER", _l, re.I):
+                _tranche.append(_l)
+    corpus_ops = norm(" ".join(_tranche))
     en_attente, section = [], False
     for ligne in md_brut.split('\n'):
         l = ligne.strip()
