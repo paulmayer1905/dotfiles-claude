@@ -66,10 +66,11 @@ python scripts/controle_passation.py <chemin.json> <chemin.md> [autre.md …] \
     --historique <dossier des lots antérieurs> \
     --backlog    <backlog consolidé.md> \
     --cr         <dossier des comptes-rendus> \
-    --lisezmoi   <LISEZMOI - Index des passations.md>
+    --lisezmoi   <LISEZMOI - Index des passations.md> \
+    --source     <document de travail .md ou .docx>
 ```
 
-**Passer les quatre options.** Chacune débloque un contrôle qui ne peut pas s'exécuter sans elle, et ce sont les plus utiles : le script le rappelle en fin de rapport pour toute option manquante.
+**Passer les cinq options.** Chacune débloque un contrôle qui ne peut pas s'exécuter sans elle, et ce sont les plus utiles : le script le rappelle en fin de rapport pour toute option manquante.
 
 | # | Contrôle | Ce qu'il détecte | Option |
 |---|---|---|---|
@@ -81,10 +82,15 @@ python scripts/controle_passation.py <chemin.json> <chemin.md> [autre.md …] \
 | 6 | Cohérence inter-lots | un libellé fixé par un lot antérieur **déjà appliqué**, remplacé de fait par le lot courant sans opération de retrait | `--historique` |
 | 7 | **Couverture** | un objet d'interface **nommé dans une décision mais sujet d'aucune US** — cité de partout, spécifié nulle part | `--backlog` |
 | 8 | **Points en suspens** | une mention « à valider / à confirmer / à arbitrer » d'un CR qui ne figure pas dans les points ouverts de l'index | `--cr` + `--lisezmoi` |
+| 9 | **Propagation** | un critère **rédigé dans le document de travail mais jamais passé** à Jira ou Confluence — l'écart entre ce qu'on a écrit et ce qu'on a livré | `--source` |
 
 Le contrôle 6 tient compte des `globalOperations` : un remplacement global couvre l'ancien texte partout, il ne déclenche donc pas d'alerte.
 
 Le contrôle 7 ignore les objets que le lot **retire** (« ne doit pas proposer de bouton « X » », « le bouton « X » soit supprimé ») : un objet supprimé n'a pas besoin d'US. Il compte comme couverture les US **créées par le lot lui-même**.
+
+Le contrôle 9 compare les identifiants de la source — `[A1]`, `[E10]`, `[PCO] - Accueil#BR013` — à ceux que portent le lot courant **et** tous les lots de `--historique`. Il lit indifféremment un `.md` et un `.docx`. C'est le pendant du contrôle 7 : celui-ci vérifie la couverture **à l'intérieur** d'un lot, le 9 vérifie qu'un ajout fait **ailleurs** a bien été livré.
+
+*Cas qui l'a motivé : les critères `[E10]` et `[E11]` du rapport « Mise à jour du ROME » avaient été ajoutés au document d'analyse — §4.E et l'US du §6 — sans qu'aucun lot ne les porte. Même angle mort que le panneau d'aide sur les statuts : un document de travail enrichi, un backlog qui ne suit pas.*
 
 Reste **à la main**, le script ne pouvant pas les juger :
 - la **pertinence** des textes rédigés (le contrôle 5 signale les suspects, pas les formulations inexactes) ;
@@ -102,6 +108,7 @@ Reste **à la main**, le script ne pouvant pas les juger :
 | Champ inexistant dans le projet (`Epic Link`, `External component`) | faire résoudre par l'extension depuis un ticket existant, ou retirer le champ |
 | **Un ticket pris en développement est modifié silencieusement** — le dev travaille sur une description qui a changé sous lui | contrôle 4 (mention du statut gelé) + US de complément |
 | **Une décision porte sur un objet qui n'a pas d'US** — elle est rattachée au ticket le plus proche au lieu de faire lever « aucune US ne couvre ça » | contrôle 7 (`--backlog`) |
+| **Un critère ajouté au document de travail n'est jamais passé à Jira** — l'analyse est à jour, le backlog non | contrôle 9 (`--source`) |
 | **Un point « à valider » d'un CR est transcrit fidèlement puis oublié** — il disparaît dans le compte-rendu sans devenir un point ouvert suivi | contrôle 8 (`--cr` + `--lisezmoi`) |
 
 ### Le cas qui a motivé les contrôles 7 et 8
