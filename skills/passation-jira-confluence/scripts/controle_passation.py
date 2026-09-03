@@ -7,6 +7,7 @@ Usage :
                                  [--backlog <backlog_consolide.md>]
                                  [--cr <fichier_ou_dossier_de_CR>]
                                  [--lisezmoi <LISEZMOI - Index des passations.md>]
+                                 [--source <document de travail .md ou .docx>]
 
 Contrôles :
   1. cohérence .json -> .md (tout texte porteur de sens du JSON figure dans le MD)
@@ -20,6 +21,8 @@ Contrôles :
   7. couverture : un objet d'interface nommé dans une décision est-il sujet d'une US ?
      (--backlog) Détecte l'objet cité de partout mais spécifié nulle part.
   8. points « à valider » des CR non suivis (--cr + --lisezmoi)
+  9. propagation : un identifiant présent dans le document de travail (--source)
+     figure-t-il dans au moins un lot ? Détecte ce qui a été rédigé mais jamais livré.
 
 Sortie : rapport lisible + code retour 1 si au moins un point est à corriger.
 """
@@ -138,11 +141,42 @@ def titres_backlog(chemin):
     return res, brut
 
 
+def lire_document(chemin):
+    """Texte brut d'un .md, .txt ou .docx."""
+    if not chemin or not os.path.exists(chemin):
+        return None
+    if chemin.lower().endswith('.docx'):
+        try:
+            import docx
+        except ImportError:
+            return None
+        d = docx.Document(chemin)
+        out = [p.text for p in d.paragraphs]
+        for t in d.tables:
+            for r in t.rows:
+                out += [c.text for c in r.cells]
+        return "\n".join(out)
+    return open(chemin, encoding='utf-8', errors='replace').read()
+
+
+RE_IDENT = (
+    re.compile(r"\[([A-Z]{1,3}\d{1,3})\]"),                    # [A1], [E10], [BR012]
+    re.compile(r"(\[PCO\][^#\n]{0,40}#BR\d+)"),                 # [PCO] - Accueil#BR013
+)
+
+def identifiants(txt):
+    out = set()
+    for rx in RE_IDENT:
+        out |= {m if isinstance(m, str) else m[0] for m in rx.findall(txt)}
+    return out
+
+
 def main():
     args = [a for a in sys.argv[1:]]
     hist_dir = None
     backlog = cr_path = lisezmoi = None
-    for drapeau in ('--historique', '--backlog', '--cr', '--lisezmoi'):
+    source = None
+    for drapeau in ('--historique', '--backlog', '--cr', '--lisezmoi', '--source'):
         if drapeau in args:
             i = args.index(drapeau)
             val = args[i + 1] if i + 1 < len(args) else None
@@ -153,6 +187,8 @@ def main():
                 backlog = val
             elif drapeau == '--cr':
                 cr_path = val
+            elif drapeau == '--source':
+                source = val
             else:
                 lisezmoi = val
     if len(args) < 2:
@@ -397,11 +433,46 @@ def main():
             print("         ou les clore explicitement.")
             pb += len(non_suivis)
 
+
+    # ---- 9. propagation : rédigé dans le document de travail, jamais livré
+    print("[9] Propagation du document de travail :", end=" ")
+    if not source:
+        print("non contrôlée (passer --source <document de travail>)")
+    else:
+        brut_src = lire_document(source)
+        if brut_src is None:
+            print(f"source illisible ({source})")
+        else:
+            ids_src = identifiants(brut_src)
+            # tout ce que portent les lots : le lot courant + ceux de --historique
+            corpus_lots = json.dumps(data, ensure_ascii=False)
+            if hist_dir and os.path.isdir(hist_dir):
+                for f in glob.glob(os.path.join(hist_dir, '**', '*.json'), recursive=True):
+                    try:
+                        corpus_lots += json.dumps(json.load(open(f, encoding='utf-8')), ensure_ascii=False)
+                    except Exception:
+                        continue
+            ids_lots = identifiants(corpus_lots)
+            manquants = sorted(ids_src - ids_lots)
+            if not ids_src:
+                print("aucun identifiant repéré dans la source")
+            elif not manquants:
+                print(f"{len(ids_src)} identifiant(s) de la source, tous présents dans un lot")
+            else:
+                print(f"{len(ids_src)} identifiant(s) de la source, {len(manquants)} JAMAIS livré(s)")
+                for i in manquants[:15]:
+                    print(f"      ! {i} — présent dans le document de travail, absent de tous les lots")
+                if len(manquants) > 15:
+                    print(f"      … et {len(manquants) - 15} autre(s)")
+                print("      -> rédigé mais jamais passé à Jira / Confluence : prévoir un lot")
+                pb += len(manquants)
+
     print("\n" + "=" * 64)
     print("RÉSULTAT : lot conforme, prêt à être livré." if pb == 0
           else f"RÉSULTAT : {pb} point(s) à corriger avant livraison.")
     manquants = [d for d, v in (('--historique', hist_dir), ('--backlog', backlog),
-                                ('--cr', cr_path), ('--lisezmoi', lisezmoi)) if not v]
+                                ('--cr', cr_path), ('--lisezmoi', lisezmoi),
+                                ('--source', source)) if not v]
     if manquants:
         print("Astuce : contrôles non exécutés faute d'argument -> " + ", ".join(manquants))
     return 1 if pb else 0
